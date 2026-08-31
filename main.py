@@ -26,6 +26,10 @@ def run_gmc():
     print("Running GMC Pipeline...")
     subprocess.run(["python", "gmc_pipeline.py"])
 
+def run_sql():
+    print("Running SQL Models...")
+    subprocess.run(["python", "sql_modeling.py"])
+
 def run_all():
     print("--- Starting Full Pipeline Sync ---")
     run_shopify()
@@ -41,4 +45,3 @@ print("Scheduler started. Pipelines will run every 1 hour.")
 while True:
     schedule.run_pending()
     time.sleep(60)
-
