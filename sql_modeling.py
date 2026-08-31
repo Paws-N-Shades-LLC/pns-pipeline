@@ -9,8 +9,6 @@ def run_sql_models():
     print("Running BigQuery SQL Modeling...")
     try:
         client = bigquery.Client(project=BQ_PROJECT_ID)
-        
-        # Create analytics dataset if it doesn't exist
         dataset_ref = client.dataset(BQ_DATASET_ANALYTICS)
         try:
             client.get_dataset(dataset_ref)
@@ -18,7 +16,7 @@ def run_sql_models():
             print(f"Creating dataset {BQ_DATASET_ANALYTICS}...")
             client.create_dataset(bigquery.Dataset(dataset_ref))
             
-        sql = f\"\"\"
+        sql = f'''
         CREATE OR REPLACE VIEW {BQ_PROJECT_ID}.{BQ_DATASET_ANALYTICS}.supplier_performance AS
         SELECT 
             f.location_id as supplier_location,
@@ -31,7 +29,7 @@ def run_sql_models():
         LEFT JOIN {BQ_PROJECT_ID}.{BQ_DATASET_CORE}.shopify_fulfillments f ON o.order_id = f.order_id
         LEFT JOIN {BQ_PROJECT_ID}.{BQ_DATASET_CORE}.shopify_refunds r ON o.order_id = r.order_id
         GROUP BY f.location_id
-        \"\"\"
+        '''
         
         job = client.query(sql)
         job.result()
