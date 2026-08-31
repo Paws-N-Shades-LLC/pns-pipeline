@@ -31,6 +31,7 @@ def run_all():
     run_shopify()
     run_gorgias()
     run_gmc()
+    run_sql()
     print("--- Sync Complete ---")
 
 run_all()
@@ -40,3 +41,4 @@ print("Scheduler started. Pipelines will run every 1 hour.")
 while True:
     schedule.run_pending()
     time.sleep(60)
+
