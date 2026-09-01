@@ -22,12 +22,8 @@ def shopify_request(endpoint):
         return {}
 
 def process_orders_and_related(orders_data):
-    orders = []
-    fulfillments = []
-    refunds = []
-    
+    orders, fulfillments, refunds = [], [], []
     for order in orders_data:
-        # Order Core
         orders.append({
             "order_id": str(order['id']),
             "order_number": str(order['order_number']),
@@ -36,8 +32,6 @@ def process_orders_and_related(orders_data):
             "financial_status": order.get('financial_status', ''),
             "fulfillment_status": order.get('fulfillment_status') or 'unfulfilled'
         })
-        
-        # Fulfillments
         for f in order.get('fulfillments', []):
             fulfillments.append({
                 "fulfillment_id": str(f['id']),
@@ -47,8 +41,6 @@ def process_orders_and_related(orders_data):
                 "location_id": str(f.get('location_id', '')),
                 "tracking_company": f.get('tracking_company', '')
             })
-            
-        # Refunds
         for r in order.get('refunds', []):
             refunds.append({
                 "refund_id": str(r['id']),
@@ -56,42 +48,14 @@ def process_orders_and_related(orders_data):
                 "created_at": r.get('created_at'),
                 "processed_at": r.get('processed_at')
             })
-            
     return pd.DataFrame(orders), pd.DataFrame(fulfillments), pd.DataFrame(refunds)
 
-def process_products(products_data):
-    products = []
-    for p in products_data:
-        products.append({
-            "product_id": str(p['id']),
-            "title": p.get('title', ''),
-            "vendor": p.get('vendor', ''),
-            "product_type": p.get('product_type', ''),
-            "status": p.get('status', '')
-        })
-    return pd.DataFrame(products)
-
-def process_inventory(inventory_data):
-    levels = []
-    for i in inventory_data:
-        levels.append({
-            "inventory_item_id": str(i['inventory_item_id']),
-            "location_id": str(i['location_id']),
-            "available": i.get('available', 0),
-            "updated_at": i.get('updated_at', '')
-        })
-    return pd.DataFrame(levels)
-
 def load_to_bigquery(df, table_name):
-    if df is None or df.empty:
-        return
+    if df is None or df.empty: return
     client = bigquery.Client(project=BQ_PROJECT_ID)
     dataset_ref = client.dataset(BQ_DATASET_ID)
-    try:
-        client.get_dataset(dataset_ref)
-    except Exception:
-        client.create_dataset(bigquery.Dataset(dataset_ref))
-
+    try: client.get_dataset(dataset_ref)
+    except Exception: client.create_dataset(bigquery.Dataset(dataset_ref))
     table_id = f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}.{table_name}"
     job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
     try:
@@ -104,27 +68,23 @@ def load_to_bigquery(df, table_name):
 if __name__ == "__main__":
     print(f"Fetching Shopify data from {SHOPIFY_STORE_DOMAIN}...")
     
-    # 1. Orders, Fulfillments, Refunds
     orders_resp = shopify_request("orders.json?status=any&limit=250")
-    raw_orders = orders_resp.get('orders', [])
-    df_orders, df_full, df_ref = process_orders_and_related(raw_orders)
+    df_orders, df_full, df_ref = process_orders_and_related(orders_resp.get('orders', []))
     load_to_bigquery(df_orders, "shopify_orders")
     load_to_bigquery(df_full, "shopify_fulfillments")
     load_to_bigquery(df_ref, "shopify_refunds")
     
-    # 2. Products
     prod_resp = shopify_request("products.json?limit=250")
-    raw_products = prod_resp.get('products', [])
-    df_prod = process_products(raw_products)
+    df_prod = pd.DataFrame([{"product_id": str(p['id']), "title": p.get('title',''), "vendor": p.get('vendor',''), "product_type": p.get('product_type',''), "status": p.get('status','')} for p in prod_resp.get('products', [])])
     load_to_bigquery(df_prod, "shopify_products")
     
-    # 3. Inventory (Need locations first)
     loc_resp = shopify_request("locations.json")
     locations = loc_resp.get('locations', [])
-    loc_ids = ",".join([str(l['id']) for l in locations])
+    df_loc = pd.DataFrame([{"location_id": str(l['id']), "name": l.get('name','')} for l in locations])
+    load_to_bigquery(df_loc, "shopify_locations")
     
+    loc_ids = ",".join([str(l['id']) for l in locations])
     if loc_ids:
         inv_resp = shopify_request(f"inventory_levels.json?location_ids={loc_ids}&limit=250")
-        raw_inv = inv_resp.get('inventory_levels', [])
-        df_inv = process_inventory(raw_inv)
+        df_inv = pd.DataFrame([{"inventory_item_id": str(i['inventory_item_id']), "location_id": str(i['location_id']), "available": i.get('available', 0), "updated_at": i.get('updated_at', '')} for i in inv_resp.get('inventory_levels', [])])
         load_to_bigquery(df_inv, "shopify_inventory")

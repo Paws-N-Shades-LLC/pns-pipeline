@@ -10,17 +10,13 @@ def run_sql_models():
     try:
         client = bigquery.Client(project=BQ_PROJECT_ID)
         dataset_ref = client.dataset(BQ_DATASET_ANALYTICS)
-        try:
-            client.get_dataset(dataset_ref)
-        except Exception:
-            print(f"Creating dataset {BQ_DATASET_ANALYTICS}...")
-            client.create_dataset(bigquery.Dataset(dataset_ref))
+        try: client.get_dataset(dataset_ref)
+        except Exception: client.create_dataset(bigquery.Dataset(dataset_ref))
             
-        # 1. Supplier Performance
         sql_supplier = f'''
         CREATE OR REPLACE VIEW {BQ_PROJECT_ID}.{BQ_DATASET_ANALYTICS}.supplier_performance AS
         SELECT 
-            f.location_id as supplier_location,
+            COALESCE(l.name, f.location_id) as supplier_name,
             COUNT(DISTINCT o.order_id) as total_orders,
             COUNT(DISTINCT f.fulfillment_id) as total_fulfillments,
             COUNT(DISTINCT r.refund_id) as total_refunds,
@@ -29,12 +25,12 @@ def run_sql_models():
         FROM {BQ_PROJECT_ID}.{BQ_DATASET_CORE}.shopify_orders o
         LEFT JOIN {BQ_PROJECT_ID}.{BQ_DATASET_CORE}.shopify_fulfillments f ON o.order_id = f.order_id
         LEFT JOIN {BQ_PROJECT_ID}.{BQ_DATASET_CORE}.shopify_refunds r ON o.order_id = r.order_id
-        GROUP BY f.location_id
+        LEFT JOIN {BQ_PROJECT_ID}.{BQ_DATASET_CORE}.shopify_locations l ON f.location_id = l.location_id
+        GROUP BY supplier_name
         '''
         client.query(sql_supplier).result()
         print("Successfully created/updated analytics.supplier_performance SQL View!")
 
-        # 2. CX Metrics
         sql_cx = f'''
         CREATE OR REPLACE VIEW {BQ_PROJECT_ID}.{BQ_DATASET_ANALYTICS}.cx_metrics AS
         SELECT 
